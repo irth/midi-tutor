@@ -1,46 +1,76 @@
 import Music from "./Music";
 
 import { useMIDIEvent, MIDI_KEYDOWN, MIDI_KEYUP } from "./midi";
-import { useState } from "react";
+import { useReducer } from "react";
 
-// TOOD: support different amount of notes than 4
+// TODO: support different amount of notes than 4
 const notesToEasyScore = (notes) =>
   [notes[0] + "/q", ...notes.slice(1)].join(", ");
 
+const ACTION_KEYDOWN = "ACTION_KEYDOWN";
+
+/*
+The events will be encoded as:
+{
+  type: ACTION_KEYDOWN,
+  key: "C4"
+}
+*/
+
+function reducer(state, action) {
+  switch (action.type) {
+    case ACTION_KEYDOWN:
+      console.log("action dispatched:", action);
+
+      const expectedNote = state.toPlay[state.position];
+      console.log("expected note:", expectedNote);
+      if (expectedNote !== action.key) {
+        console.log("Wrong note!");
+        return state;
+      }
+
+      if (state.position + 1 == state.toPlay.length) {
+        // if this was the last note
+        return {
+          ...state,
+          toPlay: ["C4", "C4", "C4", "B3"], // TODO: generate the notes randomly
+          position: 0,
+        };
+      }
+
+      // otherwise, advance the position
+      return {
+        ...state,
+        position: state.position + 1,
+      };
+
+    default:
+      throw new Error(`Unknown action type: ${action.type}`);
+  }
+}
+
 function App() {
-  const [pressedKeys, setPressedKeys] = useState([]);
-  useMIDIEvent((input, event) => {
-    switch (event.type) {
-      case MIDI_KEYDOWN:
-        setPressedKeys((prev) => {
-          if (prev.indexOf(event.key) >= 0) return;
-
-          return [...prev, event.key];
-        });
-        break;
-      case MIDI_KEYUP:
-        setPressedKeys((prev) => {
-          const idx = prev.indexOf(event.key);
-          if (idx < 0) return prev;
-
-          return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-        });
-        break;
-    }
+  const [state, dispatch] = useReducer(reducer, {
+    toPlay: ["A4", "D4", "E4", "F4"],
+    position: 0,
   });
 
-  const [notesToPlay, setNotesToPlay] = useState(["C4", "D4", "E4", "F5"]);
+  useMIDIEvent((input, event) => {
+    if (event.type === MIDI_KEYDOWN) {
+      dispatch({
+        type: ACTION_KEYDOWN,
+        key: event.key,
+      });
+    }
+  });
 
   return (
     <div className="App">
       <Music
-        style={{
-          margin: "0 auto",
-        }}
-        notes={notesToEasyScore(notesToPlay)}
-        highlightedNotes={[1, 3]}
+        notes={notesToEasyScore(state.toPlay)}
+        highlightedNotes={[...Array(state.position).keys()]}
       />
-      <div>{JSON.stringify(pressedKeys)}</div>
+      {JSON.stringify(state)}
     </div>
   );
 }
